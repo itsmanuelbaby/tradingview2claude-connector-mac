@@ -62,8 +62,7 @@
       "createStartMenuShortcut": true
     },
     "dmg": {
-      "title": "TradingView2Claude Connector",
-      "backgroundColor": "#0D0D0D"
+      "title": "TradingView2Claude Connector"
     },
     "extraResources": [
       {
