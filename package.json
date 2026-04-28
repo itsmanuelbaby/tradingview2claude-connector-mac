@@ -1,0 +1,83 @@
+{
+  "name": "tradingview2claude-connector",
+  "version": "1.0.0",
+  "description": "TradingView2Claude Connector — Analisi AI del mercato in tempo reale",
+  "author": "TradingView2Claude",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist-mac": "electron-builder --mac",
+    "dist-win": "electron-builder --win",
+    "dist": "electron-builder --mac --win"
+  },
+  "build": {
+    "appId": "com.tv2claude.connector",
+    "productName": "TradingView2Claude Connector",
+    "copyright": "TradingView2Claude Connector",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "src/**/*",
+      "assets/**/*"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "assets/icon.ico",
+      "requestedExecutionLevel": "requireAdministrator",
+      "artifactName": "TradingView2Claude-Setup-${version}.exe"
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64"
+          ]
+        }
+      ],
+      "icon": "assets/icon.icns",
+      "category": "public.app-category.utilities",
+      "artifactName": "TradingView2Claude-${version}-${arch}.dmg"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": false,
+      "deleteAppDataOnUninstall": false,
+      "createDesktopShortcut": false,
+      "createStartMenuShortcut": true
+    },
+    "dmg": {
+      "title": "TradingView2Claude Connector",
+      "backgroundColor": "#0D0D0D"
+    },
+    "extraResources": [
+      {
+        "from": "bundled-mcp",
+        "to": "bundled-mcp"
+      },
+      {
+        "from": "bundled-node",
+        "to": "bundled-node"
+      }
+    ]
+  },
+  "devDependencies": {
+    "electron": "^28.0.0",
+    "electron-builder": "^24.0.0"
+  }
+}

@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'">
+<title>TradingView2Claude Connector</title>
+<style>
+/* ── RESET & VARS ─────────────────────────────────────────── */
+*, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+:root {
+  --bg:    #0D0D0D;
+  --surf:  #141414;
+  --bord:  #1E1E1E;
+  --bord2: #2A2A2A;
+  --gold:  #D4A017;
+  --gold2: #F0C040;
+  --cyan:  #00BCD4;
+  --green: #4CAF50;
+  --red:   #F44336;
+  --yell:  #FFC107;
+  --white: #FFFFFF;
+  --gray:  #666666;
+  --lg:    #AAAAAA;
+}
+html, body { height:100%; overflow:hidden; }
+body {
+  background: var(--bg);
+  color: var(--white);
+  font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 13px;
+  user-select: none;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── TITLEBAR ─────────────────────────────────────────────── */
+#titlebar {
+  height: 40px;
+  background: #080808;
+  border-bottom: 1px solid var(--gold);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 18px;
+  flex-shrink: 0;
+  -webkit-app-region: drag;
+  position: relative;
+  z-index: 10;
+}
+#titlebar-logo {
+  font-weight: 700;
+  font-size: 12px;
+  color: var(--gold);
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+}
+#titlebar-version {
+  font-size: 10px;
+  color: var(--gray);
+  margin-left: 8px;
+}
+#btn-close {
+  -webkit-app-region: no-drag;
+  width: 13px; height: 13px;
+  border-radius: 50%;
+  background: #FF5F57;
+  border: none;
+  cursor: pointer;
+  transition: opacity .2s;
+  flex-shrink: 0;
+}
+#btn-close:hover { opacity: .7; }
+
+/* ── SCHERMATE ────────────────────────────────────────────── */
+.screen { height: calc(100vh - 40px); }
+
+/* ─── SCHERMATA LICENZA ───────────────────────────────────── */
+#scr-lic {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+  gap: 18px;
+}
+.lic-icon  { font-size: 44px; line-height: 1; color: var(--gold); }
+.lic-title { font-size: 22px; font-weight: 800; color: var(--gold); letter-spacing: 2px; text-align: center; }
+.lic-sub   { font-size: 12px; color: var(--gray); text-align: center; line-height: 1.8; max-width: 340px; }
+
+.lic-card {
+  width: 100%;
+  max-width: 400px;
+  background: var(--surf);
+  border: 1px solid var(--bord);
+  border-radius: 10px;
+  padding: 26px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.lic-label {
+  font-size: 10px;
+  color: var(--gray);
+  letter-spacing: 2px;
+  text-transform: uppercase;
+}
+.lic-input {
+  width: 100%;
+  padding: 13px 14px;
+  background: #090909;
+  border: 1px solid var(--bord);
+  border-radius: 7px;
+  color: var(--white);
+  font-family: 'Consolas', 'SF Mono', 'Courier New', monospace;
+  font-size: 17px;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  text-align: center;
+  outline: none;
+  transition: border-color .2s;
+}
+.lic-input:focus   { border-color: var(--gold); }
+.lic-input::placeholder { color: #2A2A2A; font-size: 13px; letter-spacing: 2px; }
+.lic-input:disabled { opacity: .5; }
+
+.btn-activate {
+  width: 100%;
+  padding: 14px;
+  background: linear-gradient(135deg, var(--gold) 0%, #B8860B 100%);
+  color: #000;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  border: none;
+  border-radius: 7px;
+  cursor: pointer;
+  transition: filter .2s, opacity .2s;
+}
+.btn-activate:hover:not(:disabled) { filter: brightness(1.12); }
+.btn-activate:disabled { opacity: .35; cursor: not-allowed; }
+
+.lic-status {
+  font-size: 11px;
+  text-align: center;
+  min-height: 18px;
+  line-height: 1.4;
+  word-break: break-word;
+}
+.lic-status.ok   { color: var(--green); }
+.lic-status.err  { color: var(--red); }
+.lic-status.load { color: var(--gold); }
+
+/* ─── SCHERMATA INSTALLER ─────────────────────────────────── */
+#scr-ins {
+  display: none;
+  flex-direction: row;
+}
+
+/* SIDEBAR */
+#sidebar {
+  width: 216px;
+  min-width: 216px;
+  background: var(--surf);
+  border-right: 1px solid var(--bord);
+  display: flex;
+  flex-direction: column;
+  padding: 18px 0;
+  overflow: hidden;
+}
+.sb-section {
+  padding: 0 16px 14px;
+  font-size: 10px;
+  color: var(--gray);
+  letter-spacing: 2px;
+  text-transform: uppercase;
+}
+#sb-welcome {
+  display: none;
+  margin: 0 12px 10px;
+  padding: 8px 10px;
+  background: rgba(0,188,212,.08);
+  border: 1px solid rgba(0,188,212,.2);
+  border-radius: 5px;
+  font-size: 10px;
+  color: var(--cyan);
+  word-break: break-word;
+}
+
+.step-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 16px;
+  transition: background .2s;
+  position: relative;
+}
+.step-row.running {
+  background: rgba(212,160,23,.06);
+}
+.step-row.running::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 2px;
+  background: var(--gold);
+}
+.step-num {
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 700;
+  flex-shrink: 0;
+  background: var(--bord2);
+  color: var(--gray);
+  transition: background .3s, color .3s, transform .2s;
+}
+.step-row.done    .step-num { background: var(--green); color: #fff; }
+.step-row.running .step-num { background: var(--gold);  color: #000; animation: pulse 1.2s ease-in-out infinite; }
+.step-row.error   .step-num { background: var(--red);   color: #fff; }
+@keyframes pulse {
+  0%, 100% { transform: scale(1); }
+  50%       { transform: scale(1.1); }
+}
+.step-lbl {
+  font-size: 11px;
+  color: var(--lg);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.step-row.done    .step-lbl { color: var(--white); }
+.step-row.running .step-lbl { color: var(--gold); font-weight: 600; }
+
+#sb-version {
+  margin-top: auto;
+  padding: 12px 16px 0;
+  font-size: 10px;
+  color: #333;
+  border-top: 1px solid var(--bord);
+}
+
+/* AREA PRINCIPALE */
+#main-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 18px 20px;
+  gap: 10px;
+  min-width: 0;
+  overflow: hidden;
+}
+.ins-hero { text-align: center; flex-shrink: 0; }
+.ins-hero h1 { font-size: 17px; font-weight: 800; color: var(--gold); letter-spacing: .5px; }
+.ins-hero p  { font-size: 11px; color: var(--gray); margin-top: 2px; }
+
+/* LOG */
+#log-wrap {
+  flex: 1;
+  background: #080808;
+  border: 1px solid var(--bord);
+  border-radius: 7px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+#log-hdr {
+  padding: 7px 12px;
+  background: #0C0C0C;
+  border-bottom: 1px solid var(--bord);
+  font-size: 10px;
+  color: var(--gray);
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+#log-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px 12px;
+  font-family: 'Consolas', 'SF Mono', 'Courier New', monospace;
+  font-size: 11px;
+  line-height: 1.75;
+  color: var(--lg);
+}
+#log-body .ok   { color: var(--green); }
+#log-body .err  { color: var(--red);   }
+#log-body .warn { color: var(--yell);  }
+#log-body .info { color: var(--cyan);  }
+#log-body::-webkit-scrollbar { width: 3px; }
+#log-body::-webkit-scrollbar-thumb { background: var(--bord2); border-radius: 2px; }
+
+/* PROGRESS */
+#progress-wrap { height: 4px; background: var(--bord); border-radius: 3px; overflow: hidden; flex-shrink: 0; }
+#progress-bar  { height: 100%; width: 0%; background: linear-gradient(90deg, var(--gold), var(--gold2)); transition: width .5s ease; border-radius: 3px; }
+
+/* BANNER */
+.banner {
+  display: none;
+  border-radius: 7px;
+  padding: 11px 15px;
+  text-align: center;
+  flex-shrink: 0;
+}
+.banner h3 { font-size: 12px; margin-bottom: 3px; }
+.banner p  { font-size: 11px; color: var(--lg); white-space: pre-line; }
+#b-ok  { background: rgba(76,175,80,.1);  border: 1px solid var(--green); }
+#b-ok h3  { color: var(--green); }
+#b-err { background: rgba(244,67,54,.1); border: 1px solid var(--red);   }
+#b-err h3 { color: var(--red);   }
+
+/* FOOTER */
+#footer {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+.f-status      { font-size: 11px; color: var(--gray); flex: 1; }
+.f-status.ok   { color: var(--green); }
+.f-status.err  { color: var(--red);   }
+
+.btn { padding: 8px 20px; border: none; border-radius: 5px; font-size: 12px; font-weight: 600; cursor: pointer; transition: filter .2s, opacity .2s; letter-spacing: .3px; }
+.btn-gold  { background: linear-gradient(135deg, var(--gold), #B8860B); color: #000; }
+.btn-gold:hover:not(:disabled) { filter: brightness(1.12); }
+.btn-gold:disabled { opacity: .35; cursor: not-allowed; filter: none; }
+.btn-green { background: var(--green); color: #fff; display: none; }
+.btn-green:hover { filter: brightness(1.08); }
+.btn-ghost { background: transparent; color: var(--gray); border: 1px solid var(--bord2); }
+.btn-ghost:hover { color: var(--white); border-color: #555; }
+</style>
+</head>
+<body>
+
+<!-- TITLEBAR -->
+<div id="titlebar">
+  <div style="display:flex;align-items:center;gap:0">
+    <span id="titlebar-logo">TradingView2Claude</span>
+    <span id="titlebar-version"></span>
+  </div>
+  <button id="btn-close" title="Chiudi" onclick="require('electron').ipcRenderer.send('close-app')"></button>
+</div>
+
+<!-- ════════════════════ SCHERMATA LICENZA ════════════════════ -->
+<div id="scr-lic" class="screen">
+  <div class="lic-icon">⬡</div>
+  <div class="lic-title">TradingView2Claude</div>
+  <div class="lic-sub">
+    Inserisci la tua chiave di licenza per continuare.<br>
+    La ricevi via email dopo l'acquisto.
+  </div>
+
+  <div class="lic-card">
+    <div class="lic-label">Chiave di licenza</div>
+    <input
+      class="lic-input"
+      id="lic-inp"
+      type="text"
+      placeholder="CLTV-XXXX-XXXX-XXXX"
+      maxlength="19"
+      autocomplete="off"
+      spellcheck="false"
+      oninput="fmtKey(this)"
+      onkeydown="if(event.key==='Enter')doActivate()"
+    >
+    <button class="btn-activate" id="lic-btn" onclick="doActivate()">
+      Attiva licenza →
+    </button>
+    <div class="lic-status" id="lic-msg"></div>
+  </div>
+</div>
+
+<!-- ════════════════════ SCHERMATA INSTALLER ═════════════════ -->
+<div id="scr-ins" class="screen">
+
+  <!-- SIDEBAR -->
+  <div id="sidebar">
+    <div class="sb-section">Installazione</div>
+    <div id="sb-welcome"></div>
+
+    <div class="step-row" id="s0"><div class="step-num">1</div><div class="step-lbl">Verifica sistema</div></div>
+    <div class="step-row" id="s1"><div class="step-num">2</div><div class="step-lbl">Node.js</div></div>
+    <div class="step-row" id="s2"><div class="step-num">3</div><div class="step-lbl">Git</div></div>
+    <div class="step-row" id="s3"><div class="step-num">4</div><div class="step-lbl">Claude Code</div></div>
+    <div class="step-row" id="s4"><div class="step-num">5</div><div class="step-lbl">TradingView MCP</div></div>
+    <div class="step-row" id="s5"><div class="step-num">6</div><div class="step-lbl">Rileva TradingView</div></div>
+    <div class="step-row" id="s6"><div class="step-num">7</div><div class="step-lbl">Configura MCP</div></div>
+    <div class="step-row" id="s7"><div class="step-num">8</div><div class="step-lbl">Crea launcher</div></div>
+
+    <div id="sb-version">v1.0.0</div>
+  </div>
+
+  <!-- MAIN -->
+  <div id="main-panel">
+    <div class="ins-hero">
+      <h1>TradingView2Claude Connector</h1>
+      <p>Setup automatico — segui il progresso a sinistra</p>
+    </div>
+
+    <div id="log-wrap">
+      <div id="log-hdr">● output installazione</div>
+      <div id="log-body">
+        <div class="info">› Pronto. Clicca "Inizia installazione" per cominciare.</div>
+      </div>
+    </div>
+
+    <div id="progress-wrap"><div id="progress-bar"></div></div>
+
+    <div class="banner" id="b-ok">
+      <h3>✓ Installazione completata!</h3>
+      <p>Il launcher è stato creato sul Desktop.<br>Al primo avvio verrà richiesto il login su Claude.ai (una sola volta).</p>
+    </div>
+    <div class="banner" id="b-err">
+      <h3>✗ Installazione interrotta</h3>
+      <p id="b-err-msg"></p>
+    </div>
+
+    <div id="footer">
+      <div class="f-status" id="f-status">In attesa di avvio...</div>
+      <button class="btn btn-ghost" onclick="require('electron').ipcRenderer.send('close-app')">Esci</button>
+      <button class="btn btn-green" id="btn-launch" onclick="require('electron').ipcRenderer.send('open-launcher')">▶ Avvia ora</button>
+      <button class="btn btn-gold"  id="btn-start"  onclick="doInstall()">Inizia installazione</button>
+    </div>
+  </div>
+
+</div><!-- fine scr-ins -->
+
+<script>
+'use strict';
+const { ipcRenderer: ipc } = require('electron');
+
+// ── VERSIONE ────────────────────────────────────────────────
+ipc.send('get-version');
+ipc.on('version', (_, v) => {
+  document.getElementById('titlebar-version').textContent = ' v' + v;
+  document.getElementById('sb-version').textContent = 'v' + v;
+});
+
+// ── LICENZA ──────────────────────────────────────────────────
+function fmtKey(el) {
+  // Rimuove tutto tranne alfanumerici, uppercase, max 16 chars raw
+  const raw = el.value.replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, 16);
+  // Inserisce dash ogni 4 chars
+  let out = '';
+  for (let i = 0; i < raw.length; i++) {
+    if (i > 0 && i % 4 === 0) out += '-';
+    out += raw[i];
+  }
+  // Preserva posizione cursore
+  const pos = el.selectionStart;
+  el.value = out;
+}
+
+function setLicMsg(txt, cls) {
+  const el = document.getElementById('lic-msg');
+  el.textContent = txt;
+  el.className = 'lic-status ' + (cls || '');
+}
+
+function doActivate() {
+  let k = document.getElementById('lic-inp').value.trim().toUpperCase();
+  // Se l'utente non ha digitato il prefisso CLTV, aggiungilo
+  const raw = k.replace(/-/g, '');
+  if (raw.length < 4) {
+    setLicMsg('Chiave troppo corta — formato: CLTV-XXXX-XXXX-XXXX', 'err');
+    return;
+  }
+  // Assicurati che inizi con CLTV-
+  if (!k.startsWith('CLTV-')) {
+    k = 'CLTV-' + k;
+  }
+  // Verifica lunghezza finale
+  if (k.replace(/-/g, '').length < 16) {
+    setLicMsg('Chiave incompleta — formato: CLTV-XXXX-XXXX-XXXX', 'err');
+    return;
+  }
+  setLicMsg('Verifica in corso...', 'load');
+  document.getElementById('lic-btn').disabled = true;
+  document.getElementById('lic-inp').disabled = true;
+  ipc.send('activate', { key: k });
+}
+
+ipc.on('lic-result', (_, r) => {
+  document.getElementById('lic-btn').disabled = false;
+  document.getElementById('lic-inp').disabled = false;
+  if (r.ok) {
+    setLicMsg('✓ Benvenuto, ' + r.customer_name + '!', 'ok');
+    setTimeout(() => showInstall(r.customer_name), 1200);
+  } else {
+    setLicMsg('✗ ' + r.error, 'err');
+    document.getElementById('lic-inp').focus();
+  }
+});
+
+// ── NAVIGAZIONE SCHERMATE ────────────────────────────────────
+ipc.on('screen', (_, { name, data }) => {
+  if (name === 'license') showLicense();
+  else showInstall(data && data.name);
+});
+
+function showLicense() {
+  document.getElementById('scr-lic').style.display = 'flex';
+  document.getElementById('scr-ins').style.display = 'none';
+  document.getElementById('lic-inp').focus();
+}
+
+function showInstall(name) {
+  document.getElementById('scr-lic').style.display = 'none';
+  document.getElementById('scr-ins').style.display = 'flex';
+  if (name) {
+    const w = document.getElementById('sb-welcome');
+    w.textContent = '✓ ' + name;
+    w.style.display = 'block';
+  }
+}
+
+// ── INSTALLER ────────────────────────────────────────────────
+const logBody   = document.getElementById('log-body');
+const progBar   = document.getElementById('progress-bar');
+const fStatus   = document.getElementById('f-status');
+const btnStart  = document.getElementById('btn-start');
+const btnLaunch = document.getElementById('btn-launch');
+
+function doInstall() {
+  btnStart.disabled = true;
+  fStatus.textContent = 'Installazione in corso...';
+  logBody.innerHTML = '';
+  ipc.send('start-install');
+}
+
+// Classifica ogni riga di log per colorarla correttamente
+function classifyLog(msg) {
+  const l = msg.toLowerCase();
+  if (l.includes('errore') || l.includes('error') || l.includes('failed') || l.includes('══ errore')) return 'err';
+  if (l.includes('[ok]') || l.includes('già installato') || l.includes('installato') || l.includes('trovato') || l.includes('pronto') || l.includes('configurato') || l.includes('creato')) return 'ok';
+  if (l.includes('warn') || l.includes('vulnerab')) return 'warn';
+  if (l.includes('...') || l.includes('installazione') || l.includes('aggiornamento') || l.includes('download') || l.includes('in corso')) return 'info';
+  return '';
+}
+
+ipc.on('log', (_, msg) => {
+  // Gestisce messaggi multiriga
+  const lines = msg.split('\n').filter(l => l.trim());
+  lines.forEach(line => {
+    const d = document.createElement('div');
+    const cls = classifyLog(line);
+    if (cls) d.className = cls;
+    d.textContent = '› ' + line;
+    logBody.appendChild(d);
+  });
+  logBody.scrollTop = logBody.scrollHeight;
+});
+
+ipc.on('step', (_, { index, status }) => {
+  const el = document.getElementById('s' + index);
+  if (!el) return;
+  el.className = 'step-row ' + status;
+  const num = el.querySelector('.step-num');
+  num.textContent = status === 'done' ? '✓' : status === 'error' ? '✗' : String(index + 1);
+});
+
+ipc.on('progress', (_, pct) => {
+  progBar.style.width = pct + '%';
+  if (pct < 100) fStatus.textContent = 'Installazione in corso... ' + pct + '%';
+});
+
+ipc.on('done', (_, { ok, msg }) => {
+  progBar.style.width = '100%';
+  if (ok) {
+    document.getElementById('b-ok').style.display = 'block';
+    btnLaunch.style.display = 'inline-block';
+    fStatus.textContent = 'Installazione completata!';
+    fStatus.className = 'f-status ok';
+  } else {
+    document.getElementById('b-err').style.display = 'block';
+    // Mostra messaggio multiriga
+    document.getElementById('b-err-msg').textContent = msg;
+    fStatus.textContent = 'Errore — leggi il log sopra';
+    fStatus.className = 'f-status err';
+    btnStart.disabled = false;
+    btnStart.textContent = 'Riprova';
+  }
+});
+
+// ── AVVIO: controlla licenza ─────────────────────────────────
+ipc.send('check-license');
+</script>
+</body>
+</html>

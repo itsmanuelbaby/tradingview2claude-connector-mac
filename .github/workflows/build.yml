@@ -1,0 +1,52 @@
+name: Build Installer
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build Windows .exe
+        run: npm run dist-win
+
+      - name: Upload .exe
+        uses: actions/upload-artifact@v4
+        with:
+          name: installer-windows
+          path: dist/*.exe
+
+  build-mac:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build Mac .dmg
+        run: npm run dist-mac
+
+      - name: Upload .dmg
+        uses: actions/upload-artifact@v4
+        with:
+          name: installer-mac
+          path: dist/*.dmg
