@@ -547,7 +547,18 @@ async function step3_claude() {
   if (claudePath) { sendLog('Claude Code già installato'); return claudePath; }
 
   sendLog('Installazione Claude Code in corso...');
-  await run('npm', ['install', '-g', '@anthropic-ai/claude-code'], { cwd: HOME });
+
+  if (IS_MAC) {
+    // Usa il node bundled per installare claude code
+    const bundledNode = getBundledNode();
+    const bundledDir = path.dirname(bundledNode);
+    // npm script dentro node bundled
+    const npmScript = path.join(bundledDir, 'npm');
+    const env = { ...process.env, PATH: bundledDir + ':' + process.env.PATH };
+    await run(bundledNode, [npmScript, 'install', '-g', '@anthropic-ai/claude-code'], { cwd: HOME, env });
+  } else {
+    await run('npm', ['install', '-g', '@anthropic-ai/claude-code'], { cwd: HOME });
+  }
   await refreshWinPath();
 
   // Aspetta un momento per il filesystem
