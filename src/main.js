@@ -593,8 +593,22 @@ async function step4_mcp() {
     ? path.join(process.resourcesPath, 'bundled-mcp')
     : path.join(__dirname, '..', 'bundled-mcp');
 
+  // ===== DEBUG LOGS =====
+  sendLog('DBG resourcesPath: ' + process.resourcesPath);
+  sendLog('DBG bundledMcp: ' + bundledMcp);
+  sendLog('DBG isPackaged: ' + app.isPackaged);
+  sendLog('DBG __dirname: ' + __dirname);
+  try {
+    const parentDir = path.dirname(bundledMcp);
+    sendLog('DBG parent exists: ' + fs.existsSync(parentDir));
+    if (fs.existsSync(parentDir)) {
+      sendLog('DBG parent contents: ' + fs.readdirSync(parentDir).join(', '));
+    }
+  } catch(e) { sendLog('DBG err: ' + e.message); }
+  // ===== END DEBUG =====
+
   if (!fs.existsSync(bundledMcp)) {
-    throw new Error('File MCP bundled non trovati nell\'app. Reinstalla il software.');
+    throw new Error('File MCP bundled non trovati. Path cercato: ' + bundledMcp);
   }
 
   const hasPkg = fs.existsSync(path.join(dest, 'package.json'));
