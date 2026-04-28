@@ -53,8 +53,9 @@ jobs:
           cp /tmp/node-v20.19.1-darwin-x64/bin/node bundled-node/node-x64
           chmod +x bundled-node/node-arm64 bundled-node/node-x64 bundled-node/npm
 
-      - name: Install bundled-mcp dependencies
+      - name: Setup bundled-mcp
         run: |
+          git clone https://github.com/tradesdontlie/tradingview-mcp bundled-mcp
           cd bundled-mcp && npm install
 
       - name: Install dependencies
