@@ -4,3 +4,4 @@ bundled-node/
 *.blockmap
 *.dmg
 *.exe
+bundled-mcp/node_modules/
