@@ -550,25 +550,72 @@ async function step3_claude() {
 
   if (IS_MAC) {
     const bundledNode = getBundledNode();
-    const bundledDir = path.dirname(bundledNode);
+    const bundledDir  = path.dirname(bundledNode);
     fs.chmodSync(bundledNode, 0o755);
-    if (!process.env.PATH.includes(bundledDir)) {
-      process.env.PATH = bundledDir + ':' + process.env.PATH;
-    }
+
+    // Crea symlink node -> node-arm64/node-x64
     const nodeSymlink = path.join(bundledDir, 'node');
     if (!fs.existsSync(nodeSymlink)) {
       try { fs.symlinkSync(bundledNode, nodeSymlink); } catch(_) {}
     }
-    // Usa npm di sistema se disponibile, altrimenti aggiunge path standard
-    process.env.PATH = '/usr/local/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/bin:/bin:' + process.env.PATH;
-    await run('npm', ['install', '-g', '@anthropic-ai/claude-code'], { cwd: HOME });
+
+    // Usa node bundled per eseguire npx inline — zero dipendenze da npm esterno
+    // npx è incluso in ogni installazione Node.js moderna
+    const npxScript = `
+      const { execFileSync } = require('child_process');
+      const path = require('path');
+      const fs = require('fs');
+      const HOME = require('os').homedir();
+
+      // Trova npx: prima cerca accanto al node bundled, poi nei path standard
+      const bundledDir = path.dirname(process.execPath);
+      const candidates = [
+        path.join(bundledDir, 'npx'),
+        '/opt/homebrew/bin/npx',
+        '/usr/local/bin/npx',
+        '/usr/bin/npx',
+      ];
+      let npx = candidates.find(p => fs.existsSync(p));
+
+      if (npx) {
+        // Usa npx trovato
+        execFileSync(npx, ['--yes', 'npm', 'install', '-g', '@anthropic-ai/claude-code'], {
+          stdio: 'inherit', cwd: HOME,
+          env: { ...process.env, PATH: bundledDir + ':/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin' }
+        });
+      } else {
+        // Fallback: usa node bundled con npm_modules di node per eseguire npm
+        // Node.js include lib/node_modules/npm/bin/npm-cli.js
+        const nodeLibNpm = path.join(bundledDir, '..', 'lib', 'node_modules', 'npm', 'bin', 'npm-cli.js');
+        if (fs.existsSync(nodeLibNpm)) {
+          execFileSync(process.execPath, [nodeLibNpm, 'install', '-g', '@anthropic-ai/claude-code'], {
+            stdio: 'inherit', cwd: HOME,
+            env: { ...process.env, PATH: bundledDir + ':/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin' }
+          });
+        } else {
+          throw new Error('Impossibile trovare npx o npm. Installa Node.js da https://nodejs.org e riprova.');
+        }
+      }
+    `;
+
+    // Scrivi lo script in un file temp ed eseguilo con node bundled
+    const tmpScript = path.join(HOME, '.tv2claude_install.js');
+    fs.writeFileSync(tmpScript, npxScript);
+    try {
+      await run(bundledNode, [tmpScript], {
+        cwd: HOME,
+        env: { ...process.env, PATH: bundledDir + ':/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin' }
+      });
+    } finally {
+      try { fs.unlinkSync(tmpScript); } catch(_) {}
+    }
+
   } else {
     await run('npm', ['install', '-g', '@anthropic-ai/claude-code'], { cwd: HOME });
   }
-  await refreshWinPath();
 
-  // Aspetta un momento per il filesystem
-  await new Promise(r => setTimeout(r, 1500));
+  await refreshWinPath();
+  await new Promise(r => setTimeout(r, 2000));
   claudePath = await findClaude();
 
   if (!claudePath) {
