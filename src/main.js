@@ -118,8 +118,9 @@ function run(cmd, args = [], opts = {}) {
   const { ignoreError = false, cwd, ...spawnOpts } = opts;
   return new Promise((resolve, reject) => {
     const env = { ...process.env, ...buildWinPath() };
+    // shell:false = Node passa args direttamente al processo, spazi nei path non sono un problema
     const proc = spawn(cmd, args, {
-      shell: true,
+      shell: false,
       env,
       cwd: cwd || HOME,
       ...spawnOpts,
@@ -642,7 +643,7 @@ async function step4_mcp() {
       await run('xcopy', [bundledMcp, dest, '/E', '/I', '/Y', '/Q'], { ignoreError: false });
     } else {
       if (!fs.existsSync(dest)) fs.mkdirSync(dest, { recursive: true });
-      await run('cp', ['-r', `"${bundledMcp}/."`, `"${dest}"`], { ignoreError: false });
+      await run('cp', ['-r', bundledMcp + '/.', dest], { ignoreError: false });
     }
   } else {
     sendLog('tradingview-mcp già presente');
