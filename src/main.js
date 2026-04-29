@@ -175,17 +175,39 @@ function runQ(cmd, timeoutMs = 10000) {
 // ── TROVA CLAUDE ─────────────────────────────────────────────
 async function findClaude() {
   if (IS_MAC) {
-    // Cerca prima con which (più affidabile)
-    const w = await runQ('which claude');
-    if (w && fs.existsSync(w)) return w;
-    // Percorsi comuni su Mac
+    // Cerca con which in PATH esteso
+    const extPath = '/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:' + (process.env.PATH || '');
+    const w = await runQ('which claude', { env: { PATH: extPath } });
+    if (w && w.trim() && fs.existsSync(w.trim())) return w.trim();
+
+    // Tutti i percorsi possibili dove npm può installare claude su Mac
     const macPaths = [
-      '/opt/homebrew/bin/claude',
       '/usr/local/bin/claude',
+      '/opt/homebrew/bin/claude',
       `${HOME}/.npm-global/bin/claude`,
       `${HOME}/Library/npm/bin/claude`,
+      `${HOME}/.npm/bin/claude`,
+      '/usr/local/lib/node_modules/.bin/claude',
+      '/usr/local/lib/node_modules/@anthropic-ai/claude-code/bin/claude',
     ];
-    for (const p of macPaths) if (fs.existsSync(p)) return p;
+
+    // Cerca anche nel prefix npm del node bundled
+    try {
+      const bundledNode = getBundledNode();
+      const bundledDir = path.dirname(bundledNode);
+      const npmCli = path.join(bundledDir, 'npm_modules', 'bin', 'npm-cli.js');
+      if (fs.existsSync(npmCli)) {
+        const { execFileSync } = require('child_process');
+        const prefix = execFileSync(bundledNode, [npmCli, 'config', 'get', 'prefix'], {
+          env: { ...process.env, PATH: bundledDir + ':/usr/local/bin:/usr/bin:/bin' }
+        }).toString().trim();
+        if (prefix && prefix !== 'undefined') {
+          macPaths.push(path.join(prefix, 'bin', 'claude'));
+        }
+      }
+    } catch(_) {}
+
+    for (const p of macPaths) if (p && fs.existsSync(p)) return p;
     return null;
   }
 
