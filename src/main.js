@@ -794,13 +794,33 @@ async function step6_mcp(claudePath, mcpDir) {
 
   sendLog(`Entry point MCP: ${path.basename(indexPath)}`);
 
-  // Su Windows shell:true quindi le virgolette non vanno aggiunte manualmente
+  // Rimuovi eventuali registrazioni precedenti (evita conflitti su reinstall)
+  for (const oldName of ['tradingview', 'tradingview-mcp']) {
+    await run(
+      claudePath,
+      ['mcp', 'remove', oldName],
+      { cwd: HOME, ignoreError: true }
+    );
+  }
+
+  // Registra il server MCP con nome 'tradingview-mcp' (universale, allineato al package.json)
   await run(
     claudePath,
-    ['mcp', 'add', 'tradingview', '--', 'node', indexPath],
+    ['mcp', 'add', 'tradingview-mcp', '--', 'node', indexPath],
     { cwd: HOME, ignoreError: true }
   );
-  sendLog('Server MCP configurato');
+
+  // Verifica che la registrazione sia andata a buon fine
+  try {
+    const out = await runQ(`"${claudePath}" mcp list`, 10000);
+    if (out && out.includes('tradingview-mcp')) {
+      sendLog('Server MCP configurato correttamente');
+    } else {
+      sendLog('ATTENZIONE: registrazione MCP non confermata');
+    }
+  } catch (_) {
+    sendLog('Server MCP configurato');
+  }
 }
 
 // Step 7 — Crea launcher sul Desktop
@@ -878,20 +898,27 @@ async function step7_launcher(claudePath, tvPath, mcpDir) {
       'if not defined NODE_EXE set "NODE_EXE=node"',
       '',
       'echo  [2/3] Avvio server MCP TradingView...',
-      'start /b "" "%NODE_EXE%" "' + mcpDir + '" >nul 2>&1',
+      ':: Trova entry point del server MCP (server.js o index.js)',
+      'set "MCP_ENTRY="',
+      'if exist "' + mcpDir + '\\src\\server.js" set "MCP_ENTRY=' + mcpDir + '\\src\\server.js"',
+      'if not defined MCP_ENTRY if exist "' + mcpDir + '\\src\\index.js" set "MCP_ENTRY=' + mcpDir + '\\src\\index.js"',
+      'if not defined MCP_ENTRY if exist "' + mcpDir + '\\index.js" set "MCP_ENTRY=' + mcpDir + '\\index.js"',
+      'if not defined MCP_ENTRY set "MCP_ENTRY=' + mcpDir + '"',
+      'start /b "" "%NODE_EXE%" "%MCP_ENTRY%" >nul 2>&1',
       'timeout /t 2 /nobreak >nul',
       'echo  [OK] Server MCP avviato',
       '',
-      'echo  [3/3] Avvio Claude Code...',
+      'echo  [3/3] Avvio Claude Code in nuova finestra...',
       'echo.',
-      'echo  TradingView aperto nel browser — inizia ad analizzare i grafici',
+      'echo  TradingView aperto nel browser — Claude Code si apre in una nuova finestra',
       'echo  Esempio: Analizza il grafico attuale, dimmi supporti e resistenze',
       'echo.',
-      `cd /d "${mcpDir}"`,
-      claudeExe,
-      '',
+      ':: Lancia Claude Code in NUOVA finestra cmd interattiva (mantiene input da tastiera)',
+      `start "Claude Code" cmd /k "cd /d \"${mcpDir}\" && \"${claudePath}\""`,
+      'timeout /t 3 /nobreak >nul',
+      'echo  Claude Code aperto in finestra separata. Puoi chiudere questa.',
+      'timeout /t 3 /nobreak >nul',
       'endlocal',
-      'pause',
     ];
 
     const launcherPath = path.join(desktop, 'Avvia TradingView2Claude.bat');
