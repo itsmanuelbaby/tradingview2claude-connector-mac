@@ -64,12 +64,8 @@ echo ""
 echo "  [4/5] Installazione in /Applications..."
 
 # Mount con cattura del mount point reale
-MOUNT_OUTPUT=$(hdiutil attach "$DMG_PATH" -nobrowse -noautoopen)
-MOUNT_POINT=$(echo "$MOUNT_OUTPUT" | awk '/\/Volumes\// {for(i=3;i<=NF;i++) printf "%s%s", $i, (i<NF?" ":""); print ""}' | tail -1 | sed 's/[[:space:]]*$//')
-# Fallback: cerca direttamente in /Volumes
-if [ -z "$MOUNT_POINT" ] || [ ! -d "$MOUNT_POINT" ]; then
-  MOUNT_POINT=$(find /Volumes -maxdepth 1 -name "*TradingView*" -type d 2>/dev/null | head -1)
-fi
+MOUNT_OUTPUT=$(hdiutil attach "$DMG_PATH" -nobrowse -noautoopen -quiet)
+MOUNT_POINT=$(echo "$MOUNT_OUTPUT" | grep -E "/Volumes/" | tail -1 | awk '{for(i=3;i<=NF;i++) printf "%s ", $i; print ""}' | sed 's/ *$//')
 
 if [ -z "$MOUNT_POINT" ] || [ ! -d "$MOUNT_POINT" ]; then
   echo "  X Impossibile montare il DMG."
