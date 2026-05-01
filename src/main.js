@@ -650,7 +650,21 @@ async function step4_mcp() {
 
   const hasPkg = fs.existsSync(path.join(dest, 'package.json'));
 
-  if (!hasPkg) {
+  // Controlla se la versione installata è il fork jackson corretto
+  let needsUpdate = !hasPkg;
+  if (hasPkg) {
+    try {
+      const installedPkg = JSON.parse(fs.readFileSync(path.join(dest, 'package.json'), 'utf8'));
+      const bundledPkg   = JSON.parse(fs.readFileSync(path.join(bundledMcp, 'package.json'), 'utf8'));
+      // Aggiorna se versione diversa o repo diverso
+      if (installedPkg.version !== bundledPkg.version || installedPkg.name !== bundledPkg.name) {
+        needsUpdate = true;
+        sendLog('Aggiornamento tradingview-mcp...');
+      }
+    } catch(_) { needsUpdate = true; }
+  }
+
+  if (needsUpdate) {
     sendLog('Installazione tradingview-mcp in corso...');
     // Copia i file bundled nella home del cliente
     if (IS_WIN) {
@@ -660,7 +674,7 @@ async function step4_mcp() {
       await run('cp', ['-r', bundledMcp + '/.', dest], { ignoreError: false });
     }
   } else {
-    sendLog('tradingview-mcp già presente');
+    sendLog('tradingview-mcp già aggiornato');
   }
 
   // Su Mac i node_modules sono pre-installati nel bundled-mcp
@@ -698,13 +712,14 @@ async function step6_mcp(claudePath, mcpDir) {
 
   // Auto-rileva il file entry point del server MCP
   // Controlla i percorsi più comuni usati dai repo npm/github
+  // Ordine corretto: src/server.js prima (fork jackson e tradingview-mcp usano questo)
   const candidates = [
-    path.join(mcpDir, 'index.js'),
     path.join(mcpDir, 'src', 'server.js'),
     path.join(mcpDir, 'src', 'index.js'),
-    path.join(mcpDir, 'dist', 'index.js'),
-    path.join(mcpDir, 'dist', 'server.js'),
     path.join(mcpDir, 'server.js'),
+    path.join(mcpDir, 'index.js'),
+    path.join(mcpDir, 'dist', 'server.js'),
+    path.join(mcpDir, 'dist', 'index.js'),
     path.join(mcpDir, 'app.js'),
   ];
 
@@ -754,10 +769,11 @@ async function step6_mcp(claudePath, mcpDir) {
     );
   }
 
-  // Registra il server MCP con nome 'tradingview-mcp' (universale, allineato al package.json)
+  // Registra il server MCP — su Mac usa node bundled per sicurezza
+  const nodeForMcp = IS_MAC ? getBundledNode() : 'node';
   await run(
     claudePath,
-    ['mcp', 'add', 'tradingview-mcp', '--', 'node', indexPath],
+    ['mcp', 'add', 'tradingview-mcp', '--', nodeForMcp, indexPath],
     { cwd: HOME, ignoreError: true }
   );
 
