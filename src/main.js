@@ -169,7 +169,7 @@ function getMachineId() {
 function apiPost(payload, redirectCount = 0) {
   return new Promise((resolve, reject) => {
     if (redirectCount > 5) return reject(new Error('Troppi redirect'));
-    const url = new URL('https://script.google.com/macros/s/AKfycbzlQ_GzezX6t42sAMdY-Q71Q-lrFKPZ37MLaGrk0wTzZBp8_E6bR0tON_ZFXdPJ_yS0/exec');
+    const url = new URL('https://script.google.com/macros/s/AKfycbyXx0246ZvZtieTHHLUgsG4bbZirOVMGnDgT788bodMVkwjY_6Pnusho2IAL3YSrZSW/exec');
     const data = JSON.stringify(payload);
     const opts = {
       hostname: url.hostname,
