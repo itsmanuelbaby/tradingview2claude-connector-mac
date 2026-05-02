@@ -24,15 +24,33 @@ echo "  Scarico $DMG_NAME..."
 curl -L --progress-bar "$DMG_URL" -o "$TMP_DMG"
 
 echo "  Monto il DMG..."
-MOUNT_OUTPUT=$(hdiutil attach "$TMP_DMG" -nobrowse -noautoopen 2>&1)
-MOUNT_POINT=$(echo "$MOUNT_OUTPUT" | grep -o '/Volumes/[^\n]*' | tail -1)
-APP_IN_DMG=$(find "$MOUNT_POINT" -name "*.app" -maxdepth 1 | head -1)
+# Usa -plist per parsare correttamente i path con spazi
+MOUNT_OUTPUT=$(hdiutil attach "$TMP_DMG" -nobrowse -noautoopen -plist 2>/dev/null)
+MOUNT_POINT=$(echo "$MOUNT_OUTPUT" | grep -A1 '<key>mount-point</key>' | grep '<string>' | sed 's/.*<string>\(.*\)<\/string>.*/\1/' | head -1)
+
+if [ -z "$MOUNT_POINT" ] || [ ! -d "$MOUNT_POINT" ]; then
+  echo "  ERRORE: Impossibile determinare il punto di mount"
+  exit 1
+fi
+
+echo "  Mount point: $MOUNT_POINT"
+
+APP_IN_DMG=$(find "$MOUNT_POINT" -name "*.app" -maxdepth 2 | head -1)
+
+if [ -z "$APP_IN_DMG" ]; then
+  echo "  ERRORE: App non trovata nel DMG"
+  hdiutil detach "$MOUNT_POINT" -quiet 2>/dev/null || true
+  exit 1
+fi
+
 TARGET="${INSTALL_DIR}/${APP_NAME}.app"
 
 echo "  Installo..."
 [ -d "$TARGET" ] && rm -rf "$TARGET"
 cp -R "$APP_IN_DMG" "$INSTALL_DIR/" || sudo cp -R "$APP_IN_DMG" "$INSTALL_DIR/"
+
 xattr -cr "$TARGET" 2>/dev/null || sudo xattr -cr "$TARGET" 2>/dev/null || true
+
 hdiutil detach "$MOUNT_POINT" -quiet 2>/dev/null || true
 rm -f "$TMP_DMG"
 
