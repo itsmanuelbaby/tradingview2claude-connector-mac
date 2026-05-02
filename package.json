@@ -6,9 +6,7 @@
   "main": "src/main.js",
   "scripts": {
     "start": "electron .",
-    "dist-mac": "electron-builder --mac",
-    "dist-win": "electron-builder --win",
-    "dist": "electron-builder --mac --win"
+    "dist-mac": "electron-builder --mac"
   },
   "build": {
     "appId": "com.tv2claude.connector",
@@ -21,45 +19,20 @@
       "src/**/*",
       "assets/**/*"
     ],
-    "win": {
-      "target": [
-        {
-          "target": "nsis",
-          "arch": [
-            "x64"
-          ]
-        }
-      ],
-      "icon": "assets/icon.ico",
-      "requestedExecutionLevel": "requireAdministrator",
-      "artifactName": "TradingView2Claude-Setup-${version}.exe"
-    },
     "mac": {
       "target": [
         {
           "target": "dmg",
-          "arch": [
-            "x64"
-          ]
+          "arch": ["x64"]
         },
         {
           "target": "dmg",
-          "arch": [
-            "arm64"
-          ]
+          "arch": ["arm64"]
         }
       ],
       "icon": "assets/icon.icns",
       "category": "public.app-category.utilities",
-      "artifactName": "TradingView2Claude-${version}-${arch}.dmg"
-    },
-    "nsis": {
-      "oneClick": true,
-      "perMachine": false,
-      "allowToChangeInstallationDirectory": false,
-      "deleteAppDataOnUninstall": false,
-      "createDesktopShortcut": false,
-      "createStartMenuShortcut": true
+      "artifactName": "TradingView2Claude-${arch}.dmg"
     },
     "dmg": {
       "title": "TradingView2Claude Connector"

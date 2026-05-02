@@ -561,64 +561,27 @@ async function step3_claude() {
 // Step 4 — TradingView MCP Server
 async function step4_mcp() {
   const dest = path.join(HOME, 'tradingview-mcp');
+  const hasPkg = fs.existsSync(path.join(dest, 'package.json'));
 
-  // Trova bundled-mcp: in produzione è dentro l'EXE, in sviluppo nella cartella progetto
-  let bundledMcp = app.isPackaged
-    ? path.join(process.resourcesPath, 'bundled-mcp')
-    : path.join(__dirname, '..', 'bundled-mcp');
-
-  if (IS_MAC) {
-    if (fs.existsSync(bundledMcp)) {
-      bundledMcp = fs.realpathSync(bundledMcp);
-    }
-  }
-
-  if (!fs.existsSync(bundledMcp)) {
-    throw new Error(
-      'File MCP bundled non trovati. Path cercato: ' + bundledMcp + '\n' +
-      'Reinstalla il software.'
-    );
-  }
-
-  // Verifica se la cartella installata ha il fork jackson (con src/server.js)
-  const hasSrcServer = fs.existsSync(path.join(dest, 'src', 'server.js'));
-  const bundledHasSrcServer = fs.existsSync(path.join(bundledMcp, 'src', 'server.js'));
-
-  if (!hasSrcServer || !fs.existsSync(path.join(dest, 'package.json'))) {
-    sendLog('Installazione tradingview-mcp (fork jackson)...');
-    if (fs.existsSync(dest)) {
-      await run('rm', ['-rf', dest], { ignoreError: true });
-    }
-    fs.mkdirSync(dest, { recursive: true });
-    await run('cp', ['-r', bundledMcp + '/.', dest], { ignoreError: false });
-    sendLog('tradingview-mcp installato');
-  } else if (bundledHasSrcServer) {
-    // Confronta src/server.js per vedere se serve aggiornamento
-    try {
-      const installedServer = fs.readFileSync(path.join(dest, 'src', 'server.js'), 'utf8');
-      const bundledServer   = fs.readFileSync(path.join(bundledMcp, 'src', 'server.js'), 'utf8');
-      if (installedServer !== bundledServer) {
-        sendLog('Aggiornamento tradingview-mcp...');
-        await run('rm', ['-rf', dest], { ignoreError: true });
-        fs.mkdirSync(dest, { recursive: true });
-        await run('cp', ['-r', bundledMcp + '/.', dest], { ignoreError: false });
-        sendLog('tradingview-mcp aggiornato');
-      } else {
-        sendLog('tradingview-mcp già aggiornato');
-      }
-    } catch(_) {
-      sendLog('tradingview-mcp già presente');
-    }
-  } else {
-    sendLog('tradingview-mcp già presente');
-  }
-
-  // Su Mac i node_modules sono pre-installati nel bundled-mcp
-  if (IS_MAC) {
-    sendLog('Dipendenze MCP pre-installate — OK');
-  } else {
-    sendLog('Installazione dipendenze MCP...');
+  if (hasPkg) {
+    sendLog('Aggiornamento tradingview-mcp...');
+    await run('git', ['-C', dest, 'pull', '--ff-only'], { ignoreError: true });
     await run('npm', ['install', '--no-audit', '--prefer-offline'], { cwd: dest });
+  } else {
+    sendLog('Download tradingview-mcp da GitHub...');
+    // Rimuovi cartella parziale se esiste
+    if (fs.existsSync(dest)) {
+      await run(IS_WIN ? 'rmdir' : 'rm', IS_WIN ? ['/s', '/q', dest] : ['-rf', dest], { ignoreError: true });
+    }
+    await run('git', ['clone', 'https://github.com/tradesdontlie/tradingview-mcp', dest]);
+
+    if (!fs.existsSync(path.join(dest, 'package.json'))) {
+      throw new Error(
+        'Download tradingview-mcp fallito.\n' +
+        'Verifica la connessione internet e riprova.'
+      );
+    }
+    await run('npm', ['install', '--no-audit'], { cwd: dest });
   }
 
   sendLog('tradingview-mcp pronto');
@@ -638,40 +601,16 @@ async function step6_mcp(claudePath, mcpDir) {
   if (!claudePath) throw new Error('Percorso Claude Code non determinato');
   if (!mcpDir)     throw new Error('Directory MCP non determinata');
 
-  // Ordine: src/server.js prima (fork jackson), poi fallback
-  const candidates = [
-    path.join(mcpDir, 'src', 'server.js'),
-    path.join(mcpDir, 'src', 'index.js'),
-    path.join(mcpDir, 'server.js'),
-    path.join(mcpDir, 'index.js'),
-  ];
-  let indexPath = null;
-  for (const cp of candidates) {
-    if (fs.existsSync(cp)) { indexPath = cp; break; }
-  }
-  if (!indexPath) {
-    throw new Error(`File MCP non trovato in: ${mcpDir} (cercati: src/server.js, src/index.js, server.js, index.js)`);
+  const indexPath = path.join(mcpDir, 'index.js');
+  if (!fs.existsSync(indexPath)) {
+    throw new Error(`File MCP non trovato: ${indexPath}`);
   }
 
-  sendLog(`Entry point MCP: ${path.basename(indexPath)}`);
-
-  // Rimuovi registrazioni precedenti (evita conflitti)
-  for (const oldName of ['tradingview', 'tradingview-mcp']) {
-    await run(
-      IS_WIN ? `"${claudePath}"` : claudePath,
-      ['mcp', 'remove', oldName],
-      { cwd: HOME, ignoreError: true }
-    );
-  }
-
-  // Su Mac usa node bundled per sicurezza
-  // Su Mac usa node di sistema (su questo file getBundledNode non esiste)
-  const nodeForMcp = 'node';
-
-  // Registra come tradingview-mcp (universale)
+  // Esegui: claude mcp add tradingview -- node /path/to/index.js
+  // I percorsi vengono passati come array (spawn gestisce il quoting)
   await run(
     IS_WIN ? `"${claudePath}"` : claudePath,
-    ['mcp', 'add', 'tradingview-mcp', '--', nodeForMcp, indexPath],
+    ['mcp', 'add', 'tradingview', '--', 'node', indexPath],
     { cwd: HOME, ignoreError: true }
   );
   sendLog('Server MCP configurato');
