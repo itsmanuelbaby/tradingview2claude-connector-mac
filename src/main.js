@@ -223,25 +223,47 @@ ipcMain.handle('check-license', async () => {
   const saved = loadLicense();
   if (!saved?.key) return { valid: false };
   try {
-    const res = await apiPost({ action: 'validate', key: saved.key, machineId: getMachineId() });
-    if (res?.success) { saveLicense({ key: saved.key }); return { valid: true }; }
+    const res = await apiPost({
+      action: 'check',
+      license_key: saved.key,
+      machine_id: getMachineId()
+    });
+    writeLog(`[license] check response: ${JSON.stringify(res)}`);
+    if (res?.ok) return { valid: true };
     return { valid: false };
-  } catch { return { valid: false }; }
+  } catch(e) {
+    writeLog(`[license] check error: ${e.message}`);
+    return { valid: false };
+  }
 });
 
 ipcMain.handle('activate-license', async (_, key) => {
   try {
-    const res = await apiPost({ action: 'activate', key, machineId: getMachineId() });
-    if (res?.success) { saveLicense({ key }); return { success: true }; }
-    return { success: false, message: res?.message || 'Attivazione fallita' };
-  } catch(e) { return { success: false, message: `Connessione fallita: ${e.message}` }; }
+    const res = await apiPost({
+      action: 'activate',
+      license_key: key,
+      machine_id: getMachineId(),
+      machine_info: `${os.platform()} ${os.arch()} ${os.hostname()}`
+    });
+    writeLog(`[license] activate response: ${JSON.stringify(res)}`);
+    if (res?.ok) { saveLicense({ key }); return { success: true }; }
+    return { success: false, message: res?.error || 'Attivazione fallita' };
+  } catch(e) {
+    writeLog(`[license] activate error: ${e.message}`);
+    return { success: false, message: `Connessione fallita: ${e.message}` };
+  }
 });
 
 ipcMain.handle('deactivate-license', async () => {
   const saved = loadLicense();
   if (!saved?.key) return { success: true };
   try {
-    await apiPost({ action: 'deactivate', key: saved.key, machineId: getMachineId() });
+    await apiPost({
+      action: 'deactivate',
+      license_key: saved.key,
+      machine_id: getMachineId(),
+      admin_token: 'TV2CLAUDE_ADMIN_2026'
+    });
   } catch(_) {}
   clearLicense();
   return { success: true };
@@ -613,6 +635,10 @@ ipcMain.on('open-url', (_, url) => { shell.openExternal(url); });
 
 // ── App lifecycle ────────────────────────────────────────────────
 app.whenReady().then(() => {
+  initLog();
+  writeLog('=== APP AVVIATA ===');
+  writeLog(`Versione: ${app.getVersion()}`);
+  writeLog(`Architettura: ${process.arch}`);
   createWindow();
   app.on('activate', () => { if (!mainWin) createWindow(); });
 });
