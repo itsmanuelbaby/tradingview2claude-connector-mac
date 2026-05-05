@@ -108,9 +108,8 @@ function createWindow() {
     resizable: false,
     titleBarStyle: 'hiddenInset',
     webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
-      contextIsolation: true,
-      nodeIntegration: false,
+      nodeIntegration: true,
+      contextIsolation: false,
     },
   });
   mainWin.loadFile(path.join(__dirname, 'index.html'));
