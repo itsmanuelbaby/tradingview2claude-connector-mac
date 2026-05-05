@@ -11,8 +11,6 @@ const { spawn, exec } = require('child_process');
 const fs     = require('fs');
 const os     = require('os');
 const crypto = require('crypto');
-const https  = require('https');
-const http   = require('http');
 
 // ── Costanti ─────────────────────────────────────────────────────
 const HOME    = os.homedir();
@@ -165,51 +163,28 @@ function getMachineId() {
   return crypto.createHash('sha256').update(os.hostname() + os.userInfo().username).digest('hex').substring(0, 32);
 }
 
-function apiPost(payload, redirectCount = 0) {
-  return new Promise((resolve, reject) => {
-    if (redirectCount > 5) return reject(new Error('Troppi redirect'));
-    const url = new URL('https://script.google.com/macros/s/AKfycbyXx0246ZvZtieTHHLUgsG4bbZirOVMGnDgT788bodMVkwjY_6Pnusho2IAL3YSrZSW/exec');
-    const data = JSON.stringify(payload);
-    const opts = {
-      hostname: url.hostname,
-      path: url.pathname + url.search,
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbyXx0246ZvZtieTHHLUgsG4bbZirOVMGnDgT788bodMVkwjY_6Pnusho2IAL3YSrZSW/exec';
+const API_TIMEOUT_MS = 15000;
+
+async function apiPost(payload) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
+  try {
+    const res = await fetch(GAS_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(data) },
-    };
-    const req = https.request(opts, res => {
-      if ([301, 302, 303, 307, 308].includes(res.statusCode) && res.headers.location) {
-        const loc = res.headers.location;
-        const isHttps = loc.startsWith('https');
-        const mod = isHttps ? https : http;
-        const newUrl = new URL(loc);
-        const newOpts = {
-          hostname: newUrl.hostname,
-          path: newUrl.pathname + newUrl.search,
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(data) },
-        };
-        const req2 = mod.request(newOpts, res2 => {
-          let body = '';
-          res2.on('data', d => body += d);
-          res2.on('end', () => {
-            try { resolve(JSON.parse(body)); } catch { resolve({ success: false, message: body }); }
-          });
-        });
-        req2.on('error', reject);
-        req2.write(data);
-        req2.end();
-        return;
-      }
-      let body = '';
-      res.on('data', d => body += d);
-      res.on('end', () => {
-        try { resolve(JSON.parse(body)); } catch { resolve({ success: false, message: body }); }
-      });
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+      redirect: 'follow',
     });
-    req.on('error', reject);
-    req.write(data);
-    req.end();
-  });
+    const text = await res.text();
+    try { return JSON.parse(text); } catch { return { ok: false, error: text }; }
+  } catch (e) {
+    if (e.name === 'AbortError') throw new Error('Timeout connessione (15s) — riprova');
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 const LICENSE_FILE = path.join(HOME, '.tv2claude_license');
