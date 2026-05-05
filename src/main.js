@@ -426,25 +426,32 @@ async function step6_mcp(claudePath, mcpDir) {
   const nodeBin = getBundledNodePath() || 'node';
   writeLog(`[step6] node per MCP: ${nodeBin}`);
 
+  // Crea wrapper in HOME (path senza spazi — evita bug di claude mcp add con path che hanno spazi)
+  const wrapperPath = path.join(HOME, '.tv2claude_mcp.sh');
+  const wrapperContent = `#!/bin/bash\nexec "${nodeBin}" "${indexPath}"\n`;
+  fs.writeFileSync(wrapperPath, wrapperContent, { encoding: 'utf8', mode: 0o755 });
+  writeLog(`[step6] wrapper MCP creato: ${wrapperPath}`);
+
   // Rimuovi registrazioni precedenti
   for (const oldName of ['tradingview', 'tradingview-mcp']) {
     await run(claudePath, ['mcp', 'remove', oldName], { cwd: HOME, ignoreError: true });
   }
 
-  // Registra MCP
+  // Registra MCP tramite wrapper (nessun spazio nel path)
   await run(
     claudePath,
-    ['mcp', 'add', 'tradingview-mcp', '--', nodeBin, indexPath],
-    { cwd: HOME, ignoreError: true }
+    ['mcp', 'add', 'tradingview-mcp', wrapperPath],
+    { cwd: HOME, ignoreError: false }
   );
 
   // Verifica registrazione
   const mcpList = await runQ(`"${claudePath}" mcp list`);
   writeLog(`[step6] claude mcp list: ${mcpList}`);
   if (mcpList && mcpList.includes('tradingview-mcp')) {
-    sendLog('Server MCP registrato correttamente', mainWin);
+    sendLog('Server MCP registrato correttamente ✓', mainWin);
   } else {
-    sendLog('ATTENZIONE: verifica registrazione MCP con: claude mcp list', mainWin);
+    sendLog('ATTENZIONE: tradingview-mcp non trovato in mcp list', mainWin);
+    throw new Error('Registrazione MCP fallita. Controlla il log per dettagli.');
   }
 }
 
@@ -463,6 +470,9 @@ async function step7_launcher(claudePath, tvPath, mcpDir) {
     ? path.join(mcpDir, 'src', 'server.js')
     : path.join(mcpDir, 'index.js');
 
+  // Wrapper MCP in HOME (path senza spazi — evita bug di claude mcp add con spazi)
+  const wrapperPath = path.join(HOME, '.tv2claude_mcp.sh');
+
   const script = [
     '#!/bin/bash',
     '',
@@ -472,6 +482,7 @@ async function step7_launcher(claudePath, tvPath, mcpDir) {
     `MCP_ENTRY="${mcpEntry}"`,
     `NODE="${nodeBin}"`,
     `TV_APP="${tvApp}"`,
+    `WRAPPER="${wrapperPath}"`,
     '',
     'clear',
     'echo ""',
@@ -480,10 +491,18 @@ async function step7_launcher(claudePath, tvPath, mcpDir) {
     'echo "  +==============================================+"',
     'echo ""',
     '',
+    '# Crea wrapper MCP (path senza spazi per compatibilità claude mcp add)',
+    'cat > "$WRAPPER" << \'WEOF\'',
+    '#!/bin/bash',
+    `exec "${nodeBin}" "${mcpEntry}"`,
+    'WEOF',
+    'chmod +x "$WRAPPER"',
+    '',
     '# Re-registra MCP ad ogni avvio (idempotente)',
     '"$CLAUDE" mcp remove tradingview 2>/dev/null',
     '"$CLAUDE" mcp remove tradingview-mcp 2>/dev/null',
-    '"$CLAUDE" mcp add tradingview-mcp -- "$NODE" "$MCP_ENTRY" 2>/dev/null',
+    '"$CLAUDE" mcp add tradingview-mcp "$WRAPPER"',
+    'echo "  MCP registrato: $("$CLAUDE" mcp list 2>/dev/null | grep tradingview || echo "NON trovato — controlla il log")"',
     '',
     'echo "  [1/3] Chiusura TradingView precedente..."',
     'pkill -f "TradingView" 2>/dev/null',
