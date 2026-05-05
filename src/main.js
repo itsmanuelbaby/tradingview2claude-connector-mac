@@ -437,20 +437,21 @@ async function step6_mcp(claudePath, mcpDir) {
     await run(claudePath, ['mcp', 'remove', oldName], { cwd: HOME, ignoreError: true });
   }
 
-  // Registra MCP tramite wrapper (nessun spazio nel path)
+  // Registra MCP: usa /bin/bash come command + wrapperPath come argomento
+  // (claude mcp add non esegue .sh direttamente, serve invocare bash esplicitamente)
   await run(
     claudePath,
-    ['mcp', 'add', 'tradingview-mcp', wrapperPath],
+    ['mcp', 'add', 'tradingview-mcp', '/bin/bash', wrapperPath],
     { cwd: HOME, ignoreError: false }
   );
 
-  // Verifica registrazione
-  const mcpList = await runQ(`"${claudePath}" mcp list`);
-  writeLog(`[step6] claude mcp list: ${mcpList}`);
+  // Verifica registrazione (timeout 20s — claude mcp list può essere lento)
+  const mcpList = await runQ(`"${claudePath}" mcp list`, 20000);
+  writeLog(`[step6] claude mcp list output: ${mcpList}`);
   if (mcpList && mcpList.includes('tradingview-mcp')) {
     sendLog('Server MCP registrato correttamente ✓', mainWin);
   } else {
-    sendLog('ATTENZIONE: tradingview-mcp non trovato in mcp list', mainWin);
+    sendLog(`ATTENZIONE: tradingview-mcp non trovato in mcp list (output: ${mcpList || 'vuoto'})`, mainWin);
     throw new Error('Registrazione MCP fallita. Controlla il log per dettagli.');
   }
 }
@@ -501,7 +502,7 @@ async function step7_launcher(claudePath, tvPath, mcpDir) {
     '# Re-registra MCP ad ogni avvio (idempotente)',
     '"$CLAUDE" mcp remove tradingview 2>/dev/null',
     '"$CLAUDE" mcp remove tradingview-mcp 2>/dev/null',
-    '"$CLAUDE" mcp add tradingview-mcp "$WRAPPER"',
+    '"$CLAUDE" mcp add tradingview-mcp /bin/bash "$WRAPPER"',
     'echo "  MCP registrato: $("$CLAUDE" mcp list 2>/dev/null | grep tradingview || echo "NON trovato — controlla il log")"',
     '',
     'echo "  [1/3] Chiusura TradingView precedente..."',
