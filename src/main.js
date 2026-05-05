@@ -5,7 +5,7 @@
 //  Self-contained: bundled-mcp incluso nel .app, nessuna dipendenza esterna
 // ================================================================
 
-const { app, BrowserWindow, ipcMain, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, net } = require('electron');
 const path   = require('path');
 const { spawn, exec } = require('child_process');
 const fs     = require('fs');
@@ -170,12 +170,12 @@ async function apiPost(payload) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
   try {
-    const res = await fetch(GAS_URL, {
+    // net.fetch usa lo stack di rete nativo di Electron (richiesto nel main process)
+    const res = await net.fetch(GAS_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
       signal: controller.signal,
-      redirect: 'follow',
     });
     const text = await res.text();
     try { return JSON.parse(text); } catch { return { ok: false, error: text }; }
