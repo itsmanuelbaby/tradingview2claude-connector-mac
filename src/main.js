@@ -485,9 +485,9 @@ async function step7_launcher(claudePath, tvPath, mcpDir) {
     '"$CLAUDE" mcp remove tradingview-mcp 2>/dev/null',
     '"$CLAUDE" mcp add tradingview-mcp -- "$NODE" "$MCP_ENTRY" 2>/dev/null',
     '',
-    'echo "  [1/3] Chiusura TradingView..."',
+    'echo "  [1/3] Chiusura TradingView precedente..."',
     'pkill -f "TradingView" 2>/dev/null',
-    'sleep 1',
+    'sleep 2',
     '',
     'echo "  [2/3] Apertura TradingView con porta debug..."',
     'if [ -d "$TV_APP" ]; then',
@@ -496,7 +496,21 @@ async function step7_launcher(claudePath, tvPath, mcpDir) {
     '  echo "  ATTENZIONE: TradingView non trovato in $TV_APP"',
     '  echo "  Installalo da: https://www.tradingview.com/desktop/"',
     'fi',
-    'sleep 5',
+    '',
+    '# Attendi che TradingView sia pronto su porta 9222 (max 60s)',
+    'echo "  Attendo che TradingView carichi..."',
+    'WAITED=0',
+    'until curl -s http://localhost:9222/json/list | grep -q "tradingview" 2>/dev/null; do',
+    '  sleep 2',
+    '  WAITED=$((WAITED+2))',
+    '  if [ $WAITED -ge 60 ]; then',
+    '    echo "  ATTENZIONE: TradingView non risponde su porta 9222 dopo 60s"',
+    '    echo "  Assicurati che TradingView Desktop sia aperto su un grafico"',
+    '    break',
+    '  fi',
+    '  echo "  ...${WAITED}s"',
+    'done',
+    'echo "  TradingView pronto!"',
     '',
     'echo "  [3/3] Avvio Claude Code..."',
     'echo ""',
@@ -528,13 +542,16 @@ async function runInstall() {
     { label: 'Crea launcher',     fn: null          },
   ];
 
-  mainWin?.webContents.send('steps', steps.map(s => s.label));
-
+  const total = steps.length;
   let claudePath, mcpDir, tvPath;
 
+  function stepEvent(index, status) {
+    mainWin?.webContents.send('step', { index, status });
+  }
+
   try {
-    for (let i = 0; i < steps.length; i++) {
-      mainWin?.webContents.send('step-start', i);
+    for (let i = 0; i < total; i++) {
+      stepEvent(i, 'running');
       try {
         if (i === 0) await step0_sistema();
         else if (i === 1) await step1_nodejs();
@@ -544,24 +561,35 @@ async function runInstall() {
         else if (i === 5) tvPath = await step5_findtv();
         else if (i === 6) await step6_mcp(claudePath, mcpDir);
         else if (i === 7) await step7_launcher(claudePath, tvPath, mcpDir);
-        mainWin?.webContents.send('step-ok', i);
+        stepEvent(i, 'done');
+        mainWin?.webContents.send('progress', Math.round((i + 1) / total * 100));
       } catch(e) {
         writeLog(`[ERRORE step ${i}] ${e.stack || e.message}`);
-        mainWin?.webContents.send('step-fail', i, e.message);
-        mainWin?.webContents.send('install-error', e.message);
+        stepEvent(i, 'error');
+        mainWin?.webContents.send('done', { ok: false, msg: e.message });
         return;
       }
     }
-    mainWin?.webContents.send('install-done');
+    mainWin?.webContents.send('done', { ok: true });
   } catch(e) {
     writeLog(`[ERRORE fatale] ${e.stack || e.message}`);
-    mainWin?.webContents.send('install-error', e.message);
+    mainWin?.webContents.send('done', { ok: false, msg: e.message });
   }
 }
 
 // ── IPC handlers ─────────────────────────────────────────────────
 ipcMain.on('start-install', () => { runInstall(); });
 ipcMain.on('open-url', (_, url) => { shell.openExternal(url); });
+
+// Apre il launcher .command sul Desktop
+ipcMain.on('open-launcher', () => {
+  const launcherPath = path.join(HOME, 'Desktop', 'Avvia TradingView2Claude.command');
+  if (fs.existsSync(launcherPath)) {
+    shell.openPath(launcherPath);
+  } else {
+    writeLog('[open-launcher] file non trovato: ' + launcherPath);
+  }
+});
 
 // Handler 'activate' — chiamato dalla UI con ipc.send('activate', {key})
 ipcMain.on('activate', async (event, { key }) => {
