@@ -219,55 +219,11 @@ function loadLicense() { try { return JSON.parse(fs.readFileSync(LICENSE_FILE, '
 function clearLicense() { try { fs.unlinkSync(LICENSE_FILE); } catch(_) {} }
 
 // ── IPC: Licenza ─────────────────────────────────────────────────
-ipcMain.handle('check-license', async () => {
-  const saved = loadLicense();
-  if (!saved?.key) return { valid: false };
-  try {
-    const res = await apiPost({
-      action: 'check',
-      license_key: saved.key,
-      machine_id: getMachineId()
-    });
-    writeLog(`[license] check response: ${JSON.stringify(res)}`);
-    if (res?.ok) return { valid: true };
-    return { valid: false };
-  } catch(e) {
-    writeLog(`[license] check error: ${e.message}`);
-    return { valid: false };
-  }
-});
+// check-license gestito da ipcMain.on più sotto
 
-ipcMain.handle('activate-license', async (_, key) => {
-  try {
-    const res = await apiPost({
-      action: 'activate',
-      license_key: key,
-      machine_id: getMachineId(),
-      machine_info: `${os.platform()} ${os.arch()} ${os.hostname()}`
-    });
-    writeLog(`[license] activate response: ${JSON.stringify(res)}`);
-    if (res?.ok) { saveLicense({ key }); return { success: true }; }
-    return { success: false, message: res?.error || 'Attivazione fallita' };
-  } catch(e) {
-    writeLog(`[license] activate error: ${e.message}`);
-    return { success: false, message: `Connessione fallita: ${e.message}` };
-  }
-});
+// activate-license gestito da ipcMain.on più sotto
 
-ipcMain.handle('deactivate-license', async () => {
-  const saved = loadLicense();
-  if (!saved?.key) return { success: true };
-  try {
-    await apiPost({
-      action: 'deactivate',
-      license_key: saved.key,
-      machine_id: getMachineId(),
-      admin_token: 'TV2CLAUDE_ADMIN_2026'
-    });
-  } catch(_) {}
-  clearLicense();
-  return { success: true };
-});
+// deactivate gestito lato admin
 
 // ── IPC: Log ─────────────────────────────────────────────────────
 ipcMain.handle('get-log', () => {
@@ -632,6 +588,68 @@ async function runInstall() {
 // ── IPC handlers ─────────────────────────────────────────────────
 ipcMain.on('start-install', () => { runInstall(); });
 ipcMain.on('open-url', (_, url) => { shell.openExternal(url); });
+
+// Handler 'activate' — chiamato dalla UI con ipc.send('activate', {key})
+ipcMain.on('activate', async (event, { key }) => {
+  writeLog(`[license] activate richiesto per key: ${key}`);
+  try {
+    const res = await apiPost({
+      action: 'activate',
+      license_key: key,
+      machine_id: getMachineId(),
+      machine_info: `${os.platform()} ${os.arch()} ${os.hostname()}`
+    });
+    writeLog(`[license] activate response: ${JSON.stringify(res)}`);
+    if (res?.ok) {
+      saveLicense({ key });
+      event.sender.send('lic-result', { ok: true, customer_name: res.customer_name || 'Cliente' });
+    } else {
+      event.sender.send('lic-result', { ok: false, error: res?.error || 'Chiave non valida' });
+    }
+  } catch(e) {
+    writeLog(`[license] activate error: ${e.message}`);
+    event.sender.send('lic-result', { ok: false, error: `Connessione fallita: ${e.message}` });
+  }
+});
+
+// Handler 'check-license' — chiamato dalla UI con ipc.send('check-license')
+ipcMain.on('check-license', async (event) => {
+  writeLog('[license] check-license richiesto');
+  const saved = loadLicense();
+  if (!saved?.key) {
+    writeLog('[license] nessuna licenza salvata — mostra schermata licenza');
+    event.sender.send('screen', { name: 'license' });
+    return;
+  }
+  try {
+    const res = await apiPost({
+      action: 'check',
+      license_key: saved.key,
+      machine_id: getMachineId()
+    });
+    writeLog(`[license] check response: ${JSON.stringify(res)}`);
+    if (res?.ok) {
+      event.sender.send('screen', { name: 'install', data: { name: res.customer_name } });
+    } else {
+      clearLicense();
+      event.sender.send('screen', { name: 'license' });
+    }
+  } catch(e) {
+    writeLog(`[license] check error: ${e.message}`);
+    // In caso di errore di rete mostra schermata licenza
+    event.sender.send('screen', { name: 'license' });
+  }
+});
+
+// Handler 'get-version'
+ipcMain.on('get-version', (event) => {
+  event.sender.send('version', app.getVersion());
+});
+
+// Handler 'close-app'
+ipcMain.on('close-app', () => {
+  app.quit();
+});
 
 // ── App lifecycle ────────────────────────────────────────────────
 app.whenReady().then(() => {
