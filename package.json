@@ -35,7 +35,12 @@
       "artifactName": "TradingView2Claude-${arch}.dmg"
     },
     "dmg": {
-      "title": "TradingView2Claude Connector"
+      "title": "TradingView2Claude Connector",
+      "backgroundColor": "#141414",
+      "window": {
+        "width": 540,
+        "height": 380
+      }
     },
     "extraResources": [
       {
