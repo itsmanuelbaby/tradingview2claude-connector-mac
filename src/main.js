@@ -437,48 +437,31 @@ async function step6_mcp(claudePath, mcpDir) {
     await run(claudePath, ['mcp', 'remove', oldName], { cwd: HOME, ignoreError: true });
   }
 
-  // Registra MCP: usa /bin/bash come command + wrapperPath come argomento
-  // (claude mcp add non esegue .sh direttamente, serve invocare bash esplicitamente)
+  // Registra MCP con --scope user → finisce nella sezione globale di ~/.claude.json
+  // (senza --scope user viene aggiunto come project config per HOME, invisibile
+  //  quando Claude parte da un'altra directory come bundled-mcp)
   await run(
     claudePath,
-    ['mcp', 'add', 'tradingview-mcp', '/bin/bash', wrapperPath],
+    ['mcp', 'add', '--scope', 'user', 'tradingview-mcp', '/bin/bash', wrapperPath],
     { cwd: HOME, ignoreError: false }
   );
 
-  // Verifica registrazione leggendo ~/.claude.json direttamente
-  // (claude mcp list fa health check attivo — i server stdio crashano se TV non è aperto
-  //  e vengono omessi dall'output, rendendo il check inaffidabile)
+  // Verifica leggendo ~/.claude.json — controlla che sia nella sezione user (mcpServers)
   const claudeConfigPath = path.join(HOME, '.claude.json');
   let registered = false;
   try {
-    const raw = fs.readFileSync(claudeConfigPath, 'utf8');
-    registered = raw.includes('tradingview-mcp');
-    writeLog(`[step6] ~/.claude.json contiene tradingview-mcp: ${registered}`);
+    const config = JSON.parse(fs.readFileSync(claudeConfigPath, 'utf8'));
+    registered = !!config?.mcpServers?.['tradingview-mcp'];
+    writeLog(`[step6] mcpServers in ~/.claude.json: ${JSON.stringify(config?.mcpServers)}`);
   } catch(e) {
-    writeLog(`[step6] impossibile leggere ~/.claude.json: ${e.message}`);
+    writeLog(`[step6] errore lettura ~/.claude.json: ${e.message}`);
   }
 
   if (registered) {
     sendLog('Server MCP registrato correttamente ✓', mainWin);
   } else {
-    // Fallback: prova con --scope user esplicito
-    writeLog('[step6] tentativo con --scope user...');
-    await run(
-      claudePath,
-      ['mcp', 'add', '--scope', 'user', 'tradingview-mcp', '/bin/bash', wrapperPath],
-      { cwd: HOME, ignoreError: true }
-    );
-    try {
-      const raw2 = fs.readFileSync(claudeConfigPath, 'utf8');
-      registered = raw2.includes('tradingview-mcp');
-    } catch(_) {}
-
-    if (registered) {
-      sendLog('Server MCP registrato correttamente ✓ (--scope user)', mainWin);
-    } else {
-      sendLog('ATTENZIONE: tradingview-mcp non trovato in ~/.claude.json', mainWin);
-      throw new Error('Registrazione MCP fallita. Controlla il log per dettagli.');
-    }
+    sendLog('ATTENZIONE: tradingview-mcp non trovato in mcpServers di ~/.claude.json', mainWin);
+    throw new Error('Registrazione MCP fallita. Controlla il log per dettagli.');
   }
 }
 
@@ -525,10 +508,10 @@ async function step7_launcher(claudePath, tvPath, mcpDir) {
     'WEOF',
     'chmod +x "$WRAPPER"',
     '',
-    '# Re-registra MCP ad ogni avvio (idempotente)',
-    '"$CLAUDE" mcp remove tradingview 2>/dev/null',
-    '"$CLAUDE" mcp remove tradingview-mcp 2>/dev/null',
-    '"$CLAUDE" mcp add tradingview-mcp /bin/bash "$WRAPPER"',
+    '# Re-registra MCP ad ogni avvio con --scope user (visibile da qualsiasi directory)',
+    '"$CLAUDE" mcp remove --scope user tradingview 2>/dev/null',
+    '"$CLAUDE" mcp remove --scope user tradingview-mcp 2>/dev/null',
+    '"$CLAUDE" mcp add --scope user tradingview-mcp /bin/bash "$WRAPPER"',
     'echo "  MCP registrato: $("$CLAUDE" mcp list 2>/dev/null | grep tradingview || echo "NON trovato — controlla il log")"',
     '',
     'echo "  [1/3] Chiusura TradingView precedente..."',
