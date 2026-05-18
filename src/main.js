@@ -469,8 +469,14 @@ async function step6_mcp(claudePath, mcpDir) {
 async function step7_launcher(claudePath, tvPath, mcpDir) {
   if (!claudePath) throw new Error('Percorso Claude Code non determinato');
 
-  const desktop = path.join(HOME, 'Desktop');
-  if (!fs.existsSync(desktop)) fs.mkdirSync(desktop, { recursive: true });
+  // Risolvi il percorso reale del Desktop (può essere una symlink a iCloud Drive)
+  let desktop = path.join(HOME, 'Desktop');
+  try {
+    desktop = fs.realpathSync(desktop);
+  } catch {
+    // Desktop non ancora accessibile (iCloud non sincronizzato) — usa HOME
+    desktop = HOME;
+  }
 
   const tvApp = tvPath || '/Applications/TradingView.app';
   const nodeBin = getBundledNodePath() || 'node';
@@ -487,12 +493,42 @@ async function step7_launcher(claudePath, tvPath, mcpDir) {
     '#!/bin/bash',
     '',
     '# TradingView2Claude Connector Launcher',
-    `CLAUDE="${claudePath}"`,
     `MCP_DIR="${mcpDir}"`,
     `MCP_ENTRY="${mcpEntry}"`,
     `NODE="${nodeBin}"`,
     `TV_APP="${tvApp}"`,
     `WRAPPER="${wrapperPath}"`,
+    '',
+    '# Carica i profile shell per avere il PATH corretto (il .command non è login shell)',
+    'export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"',
+    '[ -f "$HOME/.zprofile" ]     && source "$HOME/.zprofile"     2>/dev/null',
+    '[ -f "$HOME/.bash_profile" ] && source "$HOME/.bash_profile" 2>/dev/null',
+    '',
+    '# Trova Claude Code — cerca in tutti i path noti',
+    'CLAUDE=""',
+    'for p in \\',
+    '  "$HOME/.local/bin/claude" \\',
+    '  "$(which claude 2>/dev/null)" \\',
+    '  /opt/homebrew/bin/claude \\',
+    '  /usr/local/bin/claude \\',
+    '  "$HOME/.npm-global/bin/claude" \\',
+    '  "$HOME/Library/Application Support/npm/bin/claude" \\',
+    '  /opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/bin/claude \\',
+    '  /usr/local/lib/node_modules/@anthropic-ai/claude-code/bin/claude; do',
+    '  if [ -n "$p" ] && [ -x "$p" ]; then CLAUDE="$p"; break; fi',
+    'done',
+    '# Fallback: cerca il binario macOS in claude-code (installazione via Claude.app)',
+    'if [ -z "$CLAUDE" ] || [ ! -x "$CLAUDE" ]; then',
+    '  CLAUDE_CODE_DIR="$HOME/Library/Application Support/Claude/claude-code"',
+    '  if [ -d "$CLAUDE_CODE_DIR" ]; then',
+    '    CLAUDE=$(find "$CLAUDE_CODE_DIR" -path "*/MacOS/claude" -type f 2>/dev/null | sort -V | tail -1)',
+    '  fi',
+    'fi',
+    'if [ -z "$CLAUDE" ] || [ ! -x "$CLAUDE" ]; then',
+    '  echo "  ERRORE: Claude Code non trovato."',
+    '  echo "  Scaricalo da: https://claude.ai/download"',
+    '  exit 1',
+    'fi',
     '',
     'clear',
     'echo ""',
@@ -612,7 +648,9 @@ ipcMain.on('open-url', (_, url) => { shell.openExternal(url); });
 
 // Apre il launcher .command sul Desktop
 ipcMain.on('open-launcher', () => {
-  const launcherPath = path.join(HOME, 'Desktop', 'Avvia TradingView2Claude.command');
+  let desktopDir = path.join(HOME, 'Desktop');
+  try { desktopDir = fs.realpathSync(desktopDir); } catch { desktopDir = HOME; }
+  const launcherPath = path.join(desktopDir, 'Avvia TradingView2Claude.command');
   if (fs.existsSync(launcherPath)) {
     shell.openPath(launcherPath);
   } else {
