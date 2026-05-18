@@ -469,8 +469,14 @@ async function step6_mcp(claudePath, mcpDir) {
 async function step7_launcher(claudePath, tvPath, mcpDir) {
   if (!claudePath) throw new Error('Percorso Claude Code non determinato');
 
-  const desktop = path.join(HOME, 'Desktop');
-  if (!fs.existsSync(desktop)) fs.mkdirSync(desktop, { recursive: true });
+  // Risolvi il percorso reale del Desktop (può essere una symlink a iCloud Drive)
+  let desktop = path.join(HOME, 'Desktop');
+  try {
+    desktop = fs.realpathSync(desktop);
+  } catch {
+    // Desktop non ancora accessibile (iCloud non sincronizzato) — usa HOME
+    desktop = HOME;
+  }
 
   const tvApp = tvPath || '/Applications/TradingView.app';
   const nodeBin = getBundledNodePath() || 'node';
@@ -642,7 +648,9 @@ ipcMain.on('open-url', (_, url) => { shell.openExternal(url); });
 
 // Apre il launcher .command sul Desktop
 ipcMain.on('open-launcher', () => {
-  const launcherPath = path.join(HOME, 'Desktop', 'Avvia TradingView2Claude.command');
+  let desktopDir = path.join(HOME, 'Desktop');
+  try { desktopDir = fs.realpathSync(desktopDir); } catch { desktopDir = HOME; }
+  const launcherPath = path.join(desktopDir, 'Avvia TradingView2Claude.command');
   if (fs.existsSync(launcherPath)) {
     shell.openPath(launcherPath);
   } else {
